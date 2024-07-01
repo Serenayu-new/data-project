@@ -12,10 +12,11 @@ class TapDBClient:
         'source': 'https://www.tapdb.com/api/v1/ga-source/source-data',
     }
 
-    def __init__(self, email, password, target_date=None):
+    def __init__(self, email, password, target_date=None, tz_offset=0):
         self.__login(email, password)
         self.__set_date(target_date)
         self.__get_project_idx()
+        self.tz_offset = tz_offset
 
     def __login(self, email, password):
         s = requests.Session()
@@ -69,7 +70,10 @@ class TapDBClient:
             end_date = self.target_date
         elif isinstance(end_date, str):
             end_date = date.fromisoformat(end_date)
-        end_date = end_date + timedelta(days=1) - timedelta(seconds=1)
+        begin_date = datetime.fromisoformat(begin_date.isoformat())
+        end_date = datetime.fromisoformat(end_date.isoformat()) + timedelta(days=1) - timedelta(seconds=1)
+        begin_date -= timedelta(hours=self.tz_offset)
+        end_date -= timedelta(hours=self.tz_offset)
 
         # build body
         url = self.urls[name]
