@@ -9,6 +9,8 @@ class TapDBClient:
         'pay': 'https://www.tapdb.com/api/v1/ga-payment/income-data',
         'retain': 'https://www.tapdb.com/api/v1/ga-retention/device-retention',
         'active': 'https://www.tapdb.com/api/v1/ga-active/active-data',
+        'wau': 'https://www.tapdb.com/api/v1/ga-active/wau-data',
+        'mau': 'https://www.tapdb.com/api/v1/ga-active/mau-data',
         'source': 'https://www.tapdb.com/api/v1/ga-source/source-data',
     }
 
@@ -87,6 +89,8 @@ class TapDBClient:
             'dim': dim,
             'interval': 'day',
         }
+        body['date'] = body['de']
+
         body.update(kwargs)
         if dim == 'os':
             body.pop('interval')
