@@ -2,6 +2,8 @@ import gspread
 import numpy as np
 import pandas as pd
 import datetime
+import asyncio
+
 
 TYPECONVERTOR = {
     np.int64: int,
@@ -84,10 +86,10 @@ class DateSheet(BaseSheet):
         col_name = col_name.lower()
         col_idx = [i + 1 for i, v in enumerate(self.headers) if v == col_name]
         for col_id in col_idx:
-            self._update_cell(col_id, value)
+            asyncio.create_task(self._update_cell(col_id, value))
         return len(col_idx)
 
-    def _update_cell(self, col_id, value):
+    async def _update_cell(self, col_id, value):
         value = convert_type(value)
         return self.worksheet.update_cell(self.row_id, col_id, value)
 
