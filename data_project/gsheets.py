@@ -26,7 +26,7 @@ class BaseSheet:
 
     def __init__(self, sheet_name):
         self.sheet = GC.open(sheet_name)
-        self.worksheet = self.change_sheet(self.sheet.get_worksheet(0).title)
+        self.change_sheet(self.sheet.get_worksheet(0).title)
 
     @property
     def worksheet(self):
@@ -48,6 +48,7 @@ class BaseSheet:
         return df
 
     def __get_headers(self, headers_row):
+        self.headers_row = headers_row
         self.headers = [x.lower() for x in self.worksheet.row_values(headers_row)]
 
 
@@ -70,7 +71,7 @@ class DateSheet(BaseSheet):
         col_id = -1
         for key in ['日期', 'date']:
             try:
-                col_id = headers.index(key)
+                col_id = [h.strip() for h in headers].index(key)
             except ValueError:
                 continue
             else:
@@ -78,15 +79,17 @@ class DateSheet(BaseSheet):
                 break
         if col_id <= 0:
             warnings.warn("No columns named '日期' or 'date'.")
+        self.date_col = col_id
 
         # find the given date
         dates = self.worksheet.col_values(col_id)
+        row_id = -1
         try:
             row_id = dates.index(date)
         except ValueError:
-            warnings.warn(f'Given date {date} not found, min {dates[0]} max {dates[-1]}')
-
-        row_id += 1
+            warnings.warn(f'Given date {date} not found, min {dates[self.headers_row]} max {dates[-1]}')
+        else:
+            row_id += 1
         self.row_id = row_id
         return row_id
 
@@ -100,6 +103,16 @@ class DateSheet(BaseSheet):
     async def _update_cell(self, col_id, value):
         value = convert_type(value)
         return self.worksheet.update_cell(self.row_id, col_id, value)
+
+
+def int_to_char(i):
+    "convert int into char"
+    step = ord("Z") - ord("A") + 1
+    c = chr(i % step + 65)
+    i = int(i / step)
+    if i > 0:
+        return int_to_char(i - 1) + c
+    return c
 
 
 if __name__ == '__main__':
