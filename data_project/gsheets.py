@@ -1,8 +1,9 @@
+import warnings
+import datetime
+import asyncio
 import gspread
 import numpy as np
 import pandas as pd
-import datetime
-import asyncio
 
 
 TYPECONVERTOR = {
@@ -62,22 +63,29 @@ class DateSheet(BaseSheet):
         self.__find_date()
 
     def __find_date(self):
-        # locate col date
         headers = self.headers
         date = self.date
 
-        try:
-            col_id = headers.index('日期')
-        except ValueError:
-            col_id = headers.index('date')
-        col_id += 1
+        # locate col date
+        col_id = -1
+        for key in ['日期', 'date']:
+            try:
+                col_id = headers.index(key)
+            except ValueError:
+                continue
+            else:
+                col_id += 1
+                break
+        if col_id <= 0:
+            warnings.warn("No columns named '日期' or 'date'.")
 
         # find the given date
         dates = self.worksheet.col_values(col_id)
         try:
             row_id = dates.index(date)
         except ValueError:
-            raise ValueError(f'Given date {date} not found, min {dates[0]} max {dates[-1]}')
+            warnings.warn(f'Given date {date} not found, min {dates[0]} max {dates[-1]}')
+
         row_id += 1
         self.row_id = row_id
         return row_id
