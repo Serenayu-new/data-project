@@ -82,14 +82,18 @@ class DateSheet(BaseSheet):
         self.date_col = col_id
 
         # find the given date
-        dates = self.worksheet.col_values(col_id)
-        row_id = -1
-        try:
-            row_id = dates.index(date)
-        except ValueError:
-            warnings.warn(f'Given date {date} not found, min {dates[self.headers_row]} max {dates[-1]}')
+        if col_id > 0:
+            dates = self.worksheet.col_values(col_id)
+            try:
+                row_id = dates.index(date)
+            except ValueError:
+                warnings.warn(f'Given date {date} not found, min {dates[self.headers_row]} max {dates[-1]}')
+            else:
+                row_id += 1
         else:
-            row_id += 1
+            dates = []
+            row_id = -1
+
         self.row_id = row_id
         return row_id
 
