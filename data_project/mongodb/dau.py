@@ -8,7 +8,7 @@ from pymongo.collection import Collection
 WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 
-def update_dau(sheet: DateSheet, collection) -> None:
+def update_dau(sheet: DateSheet, collection: Collection, timezone: str = "+00") -> None:
     yesterday = (datetime.date.today() - datetime.timedelta(days=1))
     dates = sheet.worksheet.col_values(sheet.date_col)[sheet.headers_row:]
     if yesterday.isoformat() in dates:
@@ -16,7 +16,7 @@ def update_dau(sheet: DateSheet, collection) -> None:
         return
 
     # get data from mongodb
-    data = _get_data(collection, dates, yesterday)
+    data = _get_data(collection, dates, yesterday, timezone)
 
     # re-order the cols
     for header in sheet.headers:
@@ -35,8 +35,8 @@ def update_dau(sheet: DateSheet, collection) -> None:
         f'A{len(dates) + sheet.headers_row + 1}', data.values.tolist()
     )
 
-def _get_data(collection: Collection, dates, yesterday) -> pd.DataFrame:
-    pipeline = _build_pipeline(dates, yesterday)
+def _get_data(collection: Collection, dates, yesterday, timezone) -> pd.DataFrame:
+    pipeline = _build_pipeline(dates, yesterday, timezone)
     data = pd.DataFrame(collection.aggregate(pipeline))
     
     # add weekday
@@ -46,8 +46,7 @@ def _get_data(collection: Collection, dates, yesterday) -> pd.DataFrame:
 
 
 def _build_pipeline(
-    dates: list[datetime.date], yesterday: datetime.date,
-    timedelta: datetime.timedelta = datetime.timedelta(),
+    dates: list[datetime.date], yesterday: datetime.date, timezone,
 ) -> list[dict]:
     # define time intervals
     start_time = datetime.datetime.fromisoformat(
@@ -66,7 +65,7 @@ def _build_pipeline(
         # convert createTime into date format
         {"$addFields": {
             "createDate": {
-                "$dateTrunc": {"date": "$createTime", "unit": "day"}
+                "$dateTrunc": {"date": "$createTime", "unit": "day", "timezone": timezone}
             }}},
         # gropu by date and platform
         {"$group": {
