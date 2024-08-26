@@ -82,6 +82,7 @@ class DateSheet(BaseSheet):
         self.date_col = col_id
 
         # find the given date
+        row_id = -1
         if col_id > 0:
             dates = self.worksheet.col_values(col_id)
             try:
