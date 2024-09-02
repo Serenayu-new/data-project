@@ -8,7 +8,7 @@ from pymongo.collection import Collection
 WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 
-def update_dau(sheet: DateSheet, collection: Collection, timezone: str = "+00") -> None:
+def update_dau(sheet: DateSheet, collection: Collection, timezone: datetime.timedelta = datetime.timedelta()) -> None:
     yesterday = (datetime.date.today() - datetime.timedelta(days=1))
     dates = sheet.worksheet.col_values(sheet.date_col)[sheet.headers_row:]
     if yesterday.isoformat() in dates:
@@ -46,7 +46,7 @@ def _get_data(collection: Collection, dates, yesterday, timezone) -> pd.DataFram
 
 
 def _build_pipeline(
-    dates: list[datetime.date], yesterday: datetime.date, timezone,
+    dates: list[datetime.date], yesterday: datetime.date, timezone: datetime.timedelta,
 ) -> list[dict]:
     # define time intervals
     start_time = datetime.datetime.fromisoformat(
@@ -59,13 +59,13 @@ def _build_pipeline(
         # filter by time
         {"$match": {
             "createTime": {
-                "$gte": start_time,
-                "$lt": stop_time,
+                "$gte": start_time + timezone,
+                "$lt": stop_time + timezone,
             }}},
         # convert createTime into date format
         {"$addFields": {
             "createDate": {
-                "$dateTrunc": {"date": "$createTime", "unit": "day", "timezone": timezone}
+                "$dateTrunc": {"date": "$createTime", "unit": "day", "timezone": _get_mongo_tz(timezone)}
             }}},
         # gropu by date and platform
         {"$group": {
@@ -98,3 +98,10 @@ def _build_pipeline(
         }}
     ]
     return pipeline
+
+
+def _get_mongo_tz(timezone : datetime.timedelta) -> str:
+    seconds = timezone.total_seconds()
+    if seconds >= 0:
+        return f'+{seconds / 3600:02.0f}'
+    return f'{seconds / 3600:03.0f}'
