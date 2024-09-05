@@ -2,6 +2,7 @@ import warnings
 import datetime
 import pandas as pd
 from data_project.gsheets import DateSheet
+import pymongo
 from pymongo.collection import Collection
 
 
@@ -38,7 +39,8 @@ def get_dau(collection: Collection, start_date: datetime.date, timezone: datetim
 
 def _get_data(collection: Collection, start_date: datetime.date, yesterday, timezone) -> pd.DataFrame:
     pipeline = _build_pipeline(start_date, yesterday, timezone)
-    data = pd.DataFrame(collection.aggregate(pipeline))
+    with pymongo.timeout(120):
+        data = pd.DataFrame(collection.aggregate(pipeline))
     print(data)
     
     # add weekday
