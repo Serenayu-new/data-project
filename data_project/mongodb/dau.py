@@ -9,9 +9,16 @@ from pymongo.collection import Collection
 WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 
-def update_dau(sheet: DateSheet, collection: Collection, start_date: datetime.date, timezone: datetime.timedelta = datetime.timedelta()) -> None:
-    data = get_dau(collection, start_date, timezone)
-    
+def update_dau(sheet: DateSheet, collection: Collection, timezone: datetime.timedelta = datetime.timedelta()) -> None:
+    yesterday = (datetime.date.today() - datetime.timedelta(days=1))
+    dates = sheet.worksheet.col_values(sheet.date_col)[sheet.headers_row:]
+    if yesterday.isoformat() in dates:
+        warnings.warn(f'{yesterday} exists, the update is canceled.')
+        return
+
+    # get data from mongodb
+    data = _get_data(collection, dates, yesterday, timezone)
+
     # re-order the cols
     for header in sheet.headers:
         if header not in data.columns:
@@ -26,23 +33,15 @@ def update_dau(sheet: DateSheet, collection: Collection, start_date: datetime.da
 
     # update to sheet
     sheet.worksheet.update(
-        f'A{sheet.headers_row + 1}', data.values.tolist()
+        f'A{len(dates) + sheet.headers_row + 1}', data.values.tolist()
     )
-
-
-def get_dau(collection: Collection, start_date: datetime.date, timezone: datetime.timedelta = datetime.timedelta()) -> pd.DataFrame:
-    yesterday = (datetime.date.today() - datetime.timedelta(days=1))
     
-    # get data from mongodb
-    data = _get_data(collection, start_date, yesterday, timezone)
-    return data
-
-def _get_data(collection: Collection, start_date: datetime.date, yesterday, timezone) -> pd.DataFrame:
-    pipeline = _build_pipeline(start_date, yesterday, timezone)
+def _get_data(collection: Collection, dates, yesterday, timezone) -> pd.DataFrame:
+    pipeline = _build_pipeline(dates, yesterday, timezone)    
     with pymongo.timeout(120):
         data = pd.DataFrame(collection.aggregate(pipeline))
     print(data)
-    
+
     # add weekday
     data.loc[:, 'weekday'] = data['日期'].apply(lambda x: WEEKDAYS[x.weekday()])
     data['日期'] = data['日期'].apply(lambda x: x.isoformat().split('T')[0])
@@ -50,10 +49,11 @@ def _get_data(collection: Collection, start_date: datetime.date, yesterday, time
 
 
 def _build_pipeline(
-    start_date: datetime.date, yesterday: datetime.date, timezone: datetime.timedelta,
+    dates: list[datetime.date], yesterday: datetime.date, timezone: datetime.timedelta,
 ) -> list[dict]:
     # define time intervals
-    start_time = datetime.datetime(start_date.year, start_date.month, start_date.day)
+    start_time = datetime.datetime.fromisoformat(
+        dates[-1]) + datetime.timedelta(days=1)
     stop_time = datetime.datetime(
         yesterday.year, yesterday.month, yesterday.day,
     ) + datetime.timedelta(days=1)
@@ -62,8 +62,8 @@ def _build_pipeline(
         # filter by time
         {"$match": {
             "createTime": {
-                "$gte": start_time + timezone,
-                "$lt": stop_time + timezone,
+                "$gte": start_time - timezone,
+                "$lt": stop_time - timezone,
             }}},
         # convert createTime into date format
         {"$addFields": {
