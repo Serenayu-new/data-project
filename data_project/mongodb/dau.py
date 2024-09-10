@@ -37,11 +37,9 @@ def update_dau(sheet: DateSheet, collection: Collection, timezone: datetime.time
     )
     
 def _get_data(collection: Collection, dates, yesterday, timezone) -> pd.DataFrame:
-    pipeline = _build_pipeline(dates, yesterday, timezone)
+    pipeline = _build_pipeline(dates, yesterday, timezone)    
     with pymongo.timeout(120):
         data = pd.DataFrame(collection.aggregate(pipeline))
-    start_time = datetime.date.fromisoformat(dates[-1])
-    data = data[data['日期'] > start_time]
     print(data)
 
     # add weekday
@@ -54,7 +52,8 @@ def _build_pipeline(
     dates: list[datetime.date], yesterday: datetime.date, timezone: datetime.timedelta,
 ) -> list[dict]:
     # define time intervals
-    start_time = datetime.datetime.fromisoformat(dates[-1])
+    start_time = datetime.datetime.fromisoformat(
+        dates[-1]) + datetime.timedelta(days=1)
     stop_time = datetime.datetime(
         yesterday.year, yesterday.month, yesterday.day,
     ) + datetime.timedelta(days=1)
