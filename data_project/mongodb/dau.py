@@ -37,10 +37,17 @@ def update_dau(sheet: DateSheet, collection: Collection, timezone: datetime.time
     )
     
 def _get_data(collection: Collection, dates, yesterday, timezone) -> pd.DataFrame:
-    pipeline = _build_pipeline(dates, yesterday, timezone)    
+    pipeline_pf, pipeline_to = _build_pipeline(dates, yesterday, timezone)
+
     with pymongo.timeout(120):
-        data = pd.DataFrame(collection.aggregate(pipeline))
-    print(data)
+        data_pf = pd.DataFrame(collection.aggregate(pipeline_pf))
+    print(data_pf)
+
+    with pymongo.timeout(120):
+        data_to = pd.DataFrame(collection.aggregate(pipeline_to))
+    print(data_to)
+
+    data = pd.concat([data_pf, data_to])
 
     # add weekday
     data.loc[:, 'weekday'] = data['日期'].apply(lambda x: WEEKDAYS[x.weekday()])
@@ -58,7 +65,7 @@ def _build_pipeline(
         yesterday.year, yesterday.month, yesterday.day,
     ) + datetime.timedelta(days=1)
 
-    pipeline = [
+    stages_date = [
         # filter by time
         {"$match": {
             "createTime": {
@@ -74,7 +81,9 @@ def _build_pipeline(
                         "unit": "hour",
                         "amount": int(timezone.total_seconds() // 3600),
                     }}, "unit": "day"}
-            }}},
+            }}}
+    ]
+    pipeline_platform = stages_date + [
         # gropu by date and platform
         {"$group": {
             '_id': {
@@ -105,4 +114,34 @@ def _build_pipeline(
             'count ( _id )': "$total",
         }}
     ]
-    return pipeline
+
+    pipeline_total = stages_date + [
+        # gropu by date and platform
+        {"$group": {
+            '_id': '$createDate',
+            'acid': {
+                '$addToSet': '$userData.acid'
+            },
+            'userId': {
+                '$addToSet': '$userData.userId'
+            },
+            'deviceId': {
+                '$addToSet': '$deviceData.deviceId'
+            },
+            'total': {
+                '$sum': 1,
+            }
+        }},
+        # count the unique idx
+        {'$project': {
+            '_id': 0,
+            '日期': '$_id',
+            'platform': 'Total',
+            'distinct (acid)': {'$size': '$acid'},
+            'distinct (uid)': {'$size': '$userId'},
+            'distinct (deviceid)': {'$size': '$deviceId'},
+            'count ( _id )': "$total",
+        }}
+    ]
+
+    return pipeline_platform, pipeline_total
