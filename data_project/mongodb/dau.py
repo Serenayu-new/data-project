@@ -10,6 +10,19 @@ WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 
 def update_dau(sheet: DateSheet, collection: Collection, timezone: datetime.timedelta = datetime.timedelta()) -> None:
+    return _base_update_dau(sheet, collection, 'day', timezone)
+
+
+def update_wau(sheet: DateSheet, collection: Collection, timezone: datetime.timedelta = datetime.timedelta()) -> None:
+    return _base_update_dau(sheet, collection, 'week', timezone)
+
+
+def update_mau(sheet: DateSheet, collection: Collection, timezone: datetime.timedelta = datetime.timedelta()) -> None:
+    return _base_update_dau(sheet, collection, 'month', timezone)
+
+
+def _base_update_dau(sheet: DateSheet, collection: Collection, unit: str,
+                     timezone: datetime.timedelta) -> None:
     yesterday = (datetime.date.today() - datetime.timedelta(days=1))
     dates = sheet.worksheet.col_values(sheet.date_col)[sheet.headers_row:]
     if yesterday.isoformat() in dates:
@@ -17,7 +30,7 @@ def update_dau(sheet: DateSheet, collection: Collection, timezone: datetime.time
         return
 
     # get data from mongodb
-    data = _get_data(collection, dates, yesterday, timezone)
+    data = _get_data(collection, dates, yesterday, timezone, unit=unit)
 
     # re-order the cols
     for header in sheet.headers:
@@ -35,9 +48,11 @@ def update_dau(sheet: DateSheet, collection: Collection, timezone: datetime.time
     sheet.worksheet.update(
         f'A{len(dates) + sheet.headers_row + 1}', data.values.tolist(), raw=False
     )
-    
-def _get_data(collection: Collection, dates, yesterday, timezone) -> pd.DataFrame:
-    pipeline_pf, pipeline_to = _build_pipeline(dates, yesterday, timezone)
+
+
+def _get_data(collection: Collection, dates, yesterday, timezone, unit) -> pd.DataFrame:
+    pipeline_pf, pipeline_to = _build_pipeline(
+        dates, yesterday, timezone, unit)
 
     with pymongo.timeout(120):
         data_pf = pd.DataFrame(collection.aggregate(pipeline_pf))
@@ -55,15 +70,61 @@ def _get_data(collection: Collection, dates, yesterday, timezone) -> pd.DataFram
     return data
 
 
+def _compute_period(last_time: datetime.datetime, yesterday: datetime.datetime, unit: str) -> datetime.datetime:
+    # ensure type of yesterday
+    yesterday = datetime.datetime(
+        yesterday.year, yesterday.month, yesterday.day,
+    )
+
+    # get period function
+    try:
+        func = eval(f'_compute_period_by_{unit}')
+    except BaseException as err:
+        raise ValueError(
+            "@unit should be one of 'day', 'week', 'month'") from err
+
+    return func(last_time, yesterday,)
+
+
+def _compute_period_by_day(
+    last_time: datetime.datetime, yesterday: datetime.datetime,
+) -> tuple[datetime.datetime, datetime.datetime]:
+    start_time = last_time + datetime.timedelta(days=1)
+    stop_time = yesterday + datetime.timedelta(days=1)
+    return start_time, stop_time
+
+
+def _compute_period_by_week(
+    last_time: datetime.datetime, yesterday: datetime.datetime,
+) -> tuple[datetime.datetime, datetime.datetime]:
+    start_time = last_time + datetime.timedelta(days=7)
+    days = (yesterday - start_time).days + 1
+    stop_time = start_time + datetime.timedelta(weeks=days // 7)
+    return start_time, stop_time
+
+
+def _compute_period_by_month(
+    last_time: datetime.datetime, yesterday: datetime.datetime | None = None,
+) -> tuple[datetime.datetime, datetime.datetime]:
+    # drop ignored arg
+    del yesterday
+
+    start_month = last_time.month + 1
+    if start_month > 12:
+        start_time = datetime.datetime(last_time.year + 1, 1, 1)
+
+    today = datetime.datetime.today()
+    stop_time = datetime.datetime(today.year, today.month, 1)
+    return start_time, stop_time
+
+
 def _build_pipeline(
     dates: list[datetime.date], yesterday: datetime.date, timezone: datetime.timedelta,
+    unit: str,
 ) -> list[dict]:
-    # define time intervals
-    start_time = datetime.datetime.fromisoformat(
-        dates[-1]) + datetime.timedelta(days=1)
-    stop_time = datetime.datetime(
-        yesterday.year, yesterday.month, yesterday.day,
-    ) + datetime.timedelta(days=1)
+    # compute period
+    last_time = datetime.datetime.fromisoformat(dates[-1])
+    start_time, stop_time = _compute_period(last_time, yesterday, unit)
 
     stages_date = [
         # filter by time
@@ -80,7 +141,7 @@ def _build_pipeline(
                         "startDate": "$createTime",
                         "unit": "hour",
                         "amount": int(timezone.total_seconds() // 3600),
-                    }}, "unit": "day"}
+                    }}, "unit": unit}
             }}}
     ]
     pipeline_platform = stages_date + [
