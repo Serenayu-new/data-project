@@ -83,7 +83,9 @@ def _compute_period(last_time: datetime.datetime, yesterday: datetime.datetime, 
         raise ValueError(
             "@unit should be one of 'day', 'week', 'month'") from err
 
-    return func(last_time, yesterday,)
+    start_time, stop_time = func(last_time, yesterday)
+    print(f'{start_time=}\n{stop_time=}')
+    return start_time, stop_time
 
 
 def _compute_period_by_day(
